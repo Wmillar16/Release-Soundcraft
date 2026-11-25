@@ -1,20 +1,36 @@
-- name: Extract SoundCraft source
-        shell: pwsh
-        run: |
-          Expand-Archive -Path ".github/assets/soundcraft-main-clean-v6.zip" -DestinationPath "$env:RUNNER_TEMP\src" -Force
-          $root = Get-ChildItem "$env:RUNNER_TEMP\src" | Select-Object -First 1
-          Set-Location $root.FullName
-          "WORKSPACE_DIR=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+name: Build SoundCraft
 
-      - name: Build SoundCraft (Release)
-        shell: pwsh
-        run: |
-          cd "$env:WORKSPACE_DIR"
-          cargo build --release -p soundcraft
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
-      - name: Upload SoundCraft Windows Binary
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows:
+    name: Build Windows soundcraft.exe
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release executable
+        run: cargo build --release --package soundcraft --target x86_64-pc-windows-msvc
+
+      - name: Upload soundcraft.exe artifact
         uses: actions/upload-artifact@v4
         with:
-          name: soundcraft-windows-x64
-          path: ${{ env.WORKSPACE_DIR }}/target/release/soundcraft.exe
-```[cite: 7, 8]
+          name: soundcraft-windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/soundcraft.exe
