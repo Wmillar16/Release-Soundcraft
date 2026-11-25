@@ -1,0 +1,59 @@
+name: Build from ZIP
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_path:
+        description: "Path to the ZIP archive in the repo"
+        required: true
+        default: "soundcraft.zip"
+      package_name:
+        description: "Cargo package to build in release mode"
+        required: true
+        default: "soundcraft"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP archive
+        shell: bash
+        run: |
+          mkdir -p build_src
+          unzip -q "${{ inputs.zip_path }}" -d build_src
+          SRC_DIR="$(find build_src -name 'Cargo.toml' -maxdepth 3 -exec dirname {} \; | head -n 1)"
+          if [ -z "$SRC_DIR" ]; then
+            echo "Could not find Cargo.toml inside ${{ inputs.zip_path }}"
+            exit 1
+          fi
+          echo "SRC_DIR=$SRC_DIR" >> "$GITHUB_ENV"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "${{ env.SRC_DIR }}"
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcb1-dev \
+            libxcursor-dev libxrandr-dev libxi-dev libfontconfig1-dev libfreetype-dev \
+            mesa-vulkan-drivers libgl1-mesa-dev libasound2-dev
+
+      - name: Build release binary
+        shell: bash
+        run: |
+          cargo build --release -p "${{ inputs.package_name }}" --manifest-path "${{ env.SRC_DIR }}/Cargo.toml"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.package_name }}-release-linux
+          path: ${{ env.SRC_DIR }}/target/release/${{ inputs.package_name }}
